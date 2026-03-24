@@ -1,77 +1,272 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Elements
     const sqlInput = document.getElementById('sqlInput');
+    const lineNumbers = document.getElementById('lineNumbers');
     const executeBtn = document.getElementById('executeBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const formatBtn = document.getElementById('formatBtn');
+    
+    const schemaList = document.getElementById('schemaList');
+    const schemaSearch = document.getElementById('schemaSearch');
+    
+    const tableContainer = document.getElementById('tableContainer');
     const resultTable = document.getElementById('resultTable');
     const tableHead = document.getElementById('tableHead');
     const tableBody = document.getElementById('tableBody');
-    const errorMsg = document.getElementById('errorMsg');
-    const loading = document.getElementById('loading');
+    
+    // States
+    const emptyState = document.getElementById('emptyState');
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
+    const errorMsgText = document.getElementById('errorMsgText');
+    const resultsStats = document.getElementById('resultsStats');
+    const execTime = document.getElementById('execTime');
     const recordCount = document.getElementById('recordCount');
 
-    // Make Ctrl+Enter execute the query
-    sqlInput.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-            executeBtn.click();
+    // Toast
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toastMsg');
+    const toastIcon = document.getElementById('toastIcon');
+
+    let dbSchema = {}; // Stores fetched schema
+
+    // --- Initialization ---
+    initEditor();
+    fetchSchema();
+
+    // --- Editor Logic ---
+    function initEditor() {
+        // Sync line numbers
+        sqlInput.addEventListener('input', updateLineNumbers);
+        sqlInput.addEventListener('scroll', () => {
+            lineNumbers.scrollTop = sqlInput.scrollTop;
+        });
+
+        // Ctrl+Enter to execute
+        sqlInput.addEventListener('keydown', (e) => {
+            // Tab support
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = sqlInput.selectionStart;
+                const end = sqlInput.selectionEnd;
+                sqlInput.value = sqlInput.value.substring(0, start) + "    " + sqlInput.value.substring(end);
+                sqlInput.selectionStart = sqlInput.selectionEnd = start + 4;
+            }
+
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                executeBtn.click();
+            }
+        });
+
+        // Clear button
+        clearBtn.addEventListener('click', () => {
+            sqlInput.value = '';
+            updateLineNumbers();
+            sqlInput.focus();
+        });
+
+        // Format button (Basic uppercase formatting)
+        formatBtn.addEventListener('click', () => {
+            let text = sqlInput.value;
+            if (!text.trim()) return;
+            
+            // Very basic uppercase formatting for SQL keywords
+            const keywords = ['select', 'from', 'where', 'and', 'or', 'join', 'inner join', 'left join', 'right join', 'on', 'group by', 'order by', 'having', 'limit', 'as', 'in', 'is null', 'not null'];
+            keywords.forEach(kw => {
+                const regex = new RegExp(`\\b${kw}\\b`, 'gi');
+                text = text.replace(regex, kw.toUpperCase());
+            });
+            sqlInput.value = text;
+            showToast('Query formatted');
+        });
+
+        updateLineNumbers();
+    }
+
+    function updateLineNumbers() {
+        const lines = sqlInput.value.split('\n').length;
+        let numbersHTML = '';
+        for (let i = 1; i <= lines; i++) {
+            numbersHTML += `${i}<br>`;
         }
-    });
+        lineNumbers.innerHTML = numbersHTML || '1';
+    }
 
-    executeBtn.addEventListener('click', async () => {
-        const query = sqlInput.value.trim();
+    // --- Schema Sidebar Logic ---
+    async function fetchSchema() {
+        try {
+            const res = await fetch('/api/schema');
+            const data = await res.json();
+            
+            if (data.success) {
+                dbSchema = data.schema;
+                renderSchema(dbSchema);
+            } else {
+                schemaList.innerHTML = `<div class="loading-state text-error"><i class="ph ph-warning"></i> Failed to load schema</div>`;
+            }
+        } catch (err) {
+            schemaList.innerHTML = `<div class="loading-state text-error"><i class="ph ph-warning"></i> Error loading schema</div>`;
+        }
+    }
 
-        if (!query) {
-            showError('Please enter a SQL query.');
+    function renderSchema(schemaObject, filterText = '') {
+        const tables = Object.keys(schemaObject).sort();
+        if (tables.length === 0) {
+            schemaList.innerHTML = `<div class="loading-state">No tables found.</div>`;
             return;
         }
 
-        // Add a micro-animation to the button
+        let html = '';
+        const filterLower = filterText.toLowerCase();
+
+        tables.forEach(tableName => {
+            const columns = schemaObject[tableName];
+            // Filter logic
+            const tableMatch = tableName.toLowerCase().includes(filterLower);
+            const matchingCols = columns.filter(c => c.name.toLowerCase().includes(filterLower));
+            
+            if (filterText && !tableMatch && matchingCols.length === 0) return; // Skip if no match
+            
+            const renderCols = filterText && !tableMatch ? matchingCols : columns;
+
+            html += `
+                <div class="schema-table">
+                    <div class="table-header" onclick="toggleTable('${tableName}')">
+                        <i class="ph-fill ph-table table-icon"></i>
+                        <span>${tableName}</span>
+                        <div style="flex-grow:1"></div>
+                        <i class="ph ph-caret-right" id="caret-${tableName}" style="font-size:0.8rem; transition:transform 0.2s"></i>
+                    </div>
+                    <div class="table-columns" id="cols-${tableName}">
+                        ${renderCols.map(col => `
+                            <div class="column-item" onclick="insertText('${col.name}')">
+                                <span>${col.name}</span>
+                                <span class="column-type">${col.type}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        });
+
+        if (!html) {
+            schemaList.innerHTML = `<div class="loading-state">No matches found.</div>`;
+        } else {
+            schemaList.innerHTML = html;
+        }
+
+        // Add context menu / click to insert table name
+        document.querySelectorAll('.table-header').forEach(el => {
+            el.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                const tableName = el.querySelector('span').innerText;
+                insertText(`SELECT * FROM ${tableName}`);
+            });
+        });
+    }
+
+    // Make toggleTable global for inline onclick
+    window.toggleTable = function(tableName) {
+        const colsDiv = document.getElementById(`cols-${tableName}`);
+        const caret = document.getElementById(`caret-${tableName}`);
+        if (colsDiv.classList.contains('expanded')) {
+            colsDiv.classList.remove('expanded');
+            caret.style.transform = 'rotate(0deg)';
+        } else {
+            colsDiv.classList.add('expanded');
+            caret.style.transform = 'rotate(90deg)';
+        }
+    };
+
+    window.insertText = function(text) {
+        const start = sqlInput.selectionStart;
+        const end = sqlInput.selectionEnd;
+        sqlInput.value = sqlInput.value.substring(0, start) + text + sqlInput.value.substring(end);
+        sqlInput.selectionStart = sqlInput.selectionEnd = start + text.length;
+        sqlInput.focus();
+        showToast(`Inserted: ${text}`);
+    };
+
+    schemaSearch.addEventListener('input', (e) => {
+        renderSchema(dbSchema, e.target.value);
+    });
+
+    // --- Execution Logic ---
+    executeBtn.addEventListener('click', async () => {
+        const query = sqlInput.value.trim();
+        if (!query) {
+            showToast('Please enter a query.', true);
+            return;
+        }
+
+        // Add button animation
         executeBtn.style.transform = 'scale(0.95)';
         setTimeout(() => executeBtn.style.transform = '', 150);
 
-        // Reset UI
-        hideError();
-        resultTable.classList.add('hidden');
-        loading.classList.remove('hidden');
-        recordCount.textContent = 'Executing...';
+        // UI Reset
+        switchState('loading');
+        const startTime = performance.now();
 
         try {
             const response = await fetch('/api/query', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query })
             });
 
             const data = await response.json();
+            const timeTaken = Math.round(performance.now() - startTime);
 
             if (!response.ok || !data.success) {
-                throw new Error(data.error || 'Failed to execute query');
+                throw new Error(data.error || 'Execution failed');
             }
 
-            renderTable(data.columns, data.records);
+            // Update stats
+            execTime.innerText = `${timeTaken}ms`;
+            
+            if (data.records && data.records.length > 0) {
+                const count = data.records.length;
+                recordCount.innerText = `${count} row${count !== 1 ? 's' : ''}`;
+                resultsStats.classList.remove('hidden');
+                renderTable(data.columns, data.records);
+            } else {
+                recordCount.innerText = `${data.rowsAffected} row(s) affected`;
+                resultsStats.classList.remove('hidden');
+                switchState('empty');
+                showToast(`Query executed successfully. ${data.rowsAffected} row(s) affected.`, false);
+            }
 
         } catch (error) {
-            showError(error.message);
-        } finally {
-            loading.classList.add('hidden');
+            errorMsgText.innerText = error.message;
+            switchState('error');
+            resultsStats.classList.add('hidden');
         }
     });
 
+    function switchState(state) {
+        emptyState.classList.add('hidden');
+        loadingState.classList.add('hidden');
+        errorState.classList.add('hidden');
+        tableContainer.classList.add('hidden');
+
+        if (state === 'empty') emptyState.classList.remove('hidden');
+        if (state === 'loading') loadingState.classList.remove('hidden');
+        if (state === 'error') errorState.classList.remove('hidden');
+        if (state === 'table') tableContainer.classList.remove('hidden');
+    }
+
     function renderTable(columns, records) {
-        // Clear previous table content
         tableHead.innerHTML = '';
         tableBody.innerHTML = '';
 
         if (!columns || columns.length === 0) {
-            recordCount.textContent = '0 rows';
-            showError('Query executed successfully but returned no results.', true);
+            switchState('empty');
+            showToast('Query executed successfully. (0 rows)', false);
             return;
         }
 
-        // Update record count badge
-        recordCount.textContent = `${records.length} row${records.length !== 1 ? 's' : ''}`;
-
-        // Create Header
+        // Header
         const headerRow = document.createElement('tr');
         columns.forEach(col => {
             const th = document.createElement('th');
@@ -80,83 +275,68 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         tableHead.appendChild(headerRow);
 
-        // Create Body
+        // Body
         records.forEach(record => {
             const row = document.createElement('tr');
             columns.forEach(col => {
                 const td = document.createElement('td');
-                // Handle null and formatting
-                let value = record[col];
-                if (value === null) {
-                    td.innerHTML = '<span style="color: #64748b; font-style: italic;">NULL</span>';
-                } else if (typeof value === 'object') {
-                    // Try to format dates nicely if it's a date object string from JSON
-                    td.textContent = JSON.stringify(value);
-                } else if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)) {
-                    const d = new Date(value);
-                    if (!isNaN(d.getTime())) {
-                        const day = String(d.getDate()).padStart(2, '0');
-                        const month = String(d.getMonth() + 1).padStart(2, '0');
-                        td.textContent = `${day}/${month}/${d.getFullYear()}`;
+                const val = record[col];
+                
+                // Styling based on type
+                if (val === null) {
+                    td.innerHTML = '<span class="cell-null">NULL</span>';
+                } else if (typeof val === 'number') {
+                    td.innerHTML = `<span class="cell-number">${val}</span>`;
+                } else if (typeof val === 'boolean') {
+                    td.innerHTML = `<span class="cell-boolean">${val}</span>`;
+                } else if (typeof val === 'object') {
+                    // Try date parsing
+                    const dateStr = JSON.stringify(val).replace(/"/g,'');
+                    if (Date.parse(dateStr)) {
+                        const d = new Date(dateStr);
+                        td.textContent = d.toLocaleString();
                     } else {
-                        td.textContent = value;
+                        td.textContent = JSON.stringify(val);
                     }
                 } else {
-                    td.textContent = value;
+                    td.innerHTML = `<span class="cell-string">${escapeHtml(String(val))}</span>`;
                 }
+                
                 row.appendChild(td);
             });
             tableBody.appendChild(row);
         });
 
-        // Show Table
-        resultTable.classList.remove('hidden');
-
-        // Add a subtle fade-in animation
-        resultTable.style.opacity = '0';
-        resultTable.style.transition = 'opacity 0.4s ease';
-        setTimeout(() => {
-            resultTable.style.opacity = '1';
-        }, 10);
+        switchState('table');
     }
 
-    function showError(message, isInfo = false) {
-        errorMsg.textContent = message;
-        errorMsg.classList.remove('hidden');
+    function escapeHtml(unsafe) {
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
 
-        if (isInfo) {
-            errorMsg.style.background = 'var(--accent-glow)';
-            errorMsg.style.color = '#93c5fd';
-            errorMsg.style.borderColor = 'rgba(59, 130, 246, 0.2)';
+    // --- Toast Logic ---
+    let toastTimeout;
+    function showToast(message, isError = false) {
+        clearTimeout(toastTimeout);
+        
+        toastMsg.innerText = message;
+        if (isError) {
+            toast.classList.add('error');
+            toastIcon.className = 'ph-fill ph-warning-circle';
         } else {
-            errorMsg.style.background = 'var(--error-bg)';
-            errorMsg.style.color = 'var(--error-color)';
-            errorMsg.style.borderColor = 'rgba(239, 68, 68, 0.2)';
-            recordCount.textContent = 'Error';
+            toast.classList.remove('error');
+            toastIcon.className = 'ph-fill ph-check-circle';
         }
 
-        // Add shake animation for errors
-        if (!isInfo) {
-            errorMsg.style.animation = 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both';
-            setTimeout(() => {
-                errorMsg.style.animation = '';
-            }, 400);
-        }
-    }
-
-    function hideError() {
-        errorMsg.classList.add('hidden');
+        toast.classList.add('show');
+        
+        toastTimeout = setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
     }
 });
-
-// Add keyframes for shake animation dynamically
-const style = document.createElement('style');
-style.innerHTML = `
-@keyframes shake {
-  10%, 90% { transform: translate3d(-1px, 0, 0); }
-  20%, 80% { transform: translate3d(2px, 0, 0); }
-  30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-  40%, 60% { transform: translate3d(4px, 0, 0); }
-}
-`;
-document.head.appendChild(style);

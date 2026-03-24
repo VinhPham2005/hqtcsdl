@@ -93,20 +93,7 @@ Khi người dùng nhấn Execute:
 
 ## Bước 3: Backend kiểm tra truy vấn
 
-Backend kiểm tra loại câu lệnh SQL.
-
-Chỉ cho phép câu lệnh SELECT.
-
-Các câu lệnh bị từ chối gồm:
-
-DROP  
-DELETE  
-UPDATE  
-INSERT  
-ALTER  
-TRUNCATE  
-
-Mục đích là để tránh thay đổi dữ liệu và giảm nguy cơ SQL Injection.
+Hệ thống chấp nhận mọi loại câu truy vấn 
 
 ---
 
