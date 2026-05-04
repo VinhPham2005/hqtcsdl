@@ -1,151 +1,106 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQL Studio Premium</title>
+    <title>Mongo Query Studio — Health & Fitness DB</title>
+    <meta name="description" content="MongoDB query interface for Health & Fitness tracking database.">
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 </head>
 <body>
-    <!-- Animated background layers -->
     <div class="bg-orb orb-1"></div>
     <div class="bg-orb orb-2"></div>
     <div class="bg-orb orb-3"></div>
     <div class="grid-overlay"></div>
 
     <div class="app-container">
-        <!-- Sidebar for Schema -->
         <aside class="sidebar glass-panel">
             <div class="sidebar-header">
-                <i class="ph-fill ph-database icon-accent"></i>
-                <h2>Database Schema</h2>
+                <i class="ph-fill ph-leaf icon-accent"></i>
+                <h2>Collections</h2>
+                <span class="collection-count" id="collectionCount">0</span>
             </div>
             <div class="schema-search">
                 <i class="ph ph-magnifying-glass"></i>
-                <input type="text" id="schemaSearch" placeholder="Search tables..." autocomplete="off">
+                <input type="text" id="schemaSearch" placeholder="Search collections..." autocomplete="off">
             </div>
             <div class="schema-list" id="schemaList">
-                <div class="loading-state">
-                    <i class="ph ph-spinner-gap spin"></i>
-                    <span>Loading schema...</span>
-                </div>
+                <div class="loading-state"><i class="ph ph-spinner-gap spin"></i><span>Loading schema...</span></div>
             </div>
         </aside>
 
-        <!-- Main Content Area -->
         <main class="main-content">
-            <!-- Top Navigation -->
             <header class="top-nav glass-panel">
                 <div class="app-title">
-                    <div class="logo-icon">
-                        <i class="ph-fill ph-code"></i>
-                    </div>
+                    <div class="logo-icon"><i class="ph-fill ph-leaf"></i></div>
                     <div class="title-text">
-                        <h1>SQL Studio <span>Premium</span></h1>
-                        <p>Secure Database Query Environment</p>
+                        <h1>Mongo Query <span>Studio</span></h1>
+                        <p>Health & Fitness Database</p>
                     </div>
                 </div>
                 <div class="nav-actions">
-                    <div class="status-indicator">
-                        <span class="pulse-dot"></span>
-                        SQL Server Connected
-                    </div>
-                    <button id="themeToggle" class="icon-btn" title="Toggle Theme">
-                        <i class="ph ph-moon"></i>
-                    </button>
-                    <a href="https://github.com" target="_blank" class="icon-btn" title="GitHub">
-                        <i class="ph ph-github-logo"></i>
-                    </a>
+                    <div class="status-indicator"><span class="pulse-dot"></span>MongoDB Connected</div>
+                    <div class="security-badge"><i class="ph-fill ph-shield-check"></i></div>
                 </div>
             </header>
 
-            <!-- Editor Section -->
             <div class="editor-section glass-panel">
                 <div class="panel-header">
-                    <div class="mac-dots">
-                        <span class="dot close"></span>
-                        <span class="dot minimize"></span>
-                        <span class="dot maximize"></span>
-                    </div>
-                    <div class="tab pointer">
-                        <i class="ph-fill ph-file-sql"></i> query.sql
-                    </div>
+                    <div class="mac-dots"><span class="dot close"></span><span class="dot minimize"></span><span class="dot maximize"></span></div>
+                    <div class="tab"><i class="ph-fill ph-file-code"></i> query.js</div>
                     <div class="editor-actions">
-                        <button id="clearBtn" class="btn-secondary" title="Clear Editor">
-                            <i class="ph ph-eraser"></i> Clear
-                        </button>
-                        <button id="formatBtn" class="btn-secondary" title="Format SQL">
-                            <i class="ph ph-magic-wand"></i> Format
-                        </button>
+                        <button id="clearBtn" class="btn-secondary" title="Clear"><i class="ph ph-eraser"></i> Clear</button>
+                        <button id="formatBtn" class="btn-secondary" title="Format"><i class="ph ph-magic-wand"></i> Format</button>
                     </div>
                 </div>
                 <div class="editor-wrapper">
-                    <!-- Line numbers -->
                     <div class="line-numbers" id="lineNumbers">1</div>
-                    <textarea id="sqlInput" placeholder="-- Enter your SQL query here...&#10;SELECT * FROM Players" spellcheck="false"></textarea>
+                    <textarea id="queryInput" placeholder="db.users.find({})" spellcheck="false">db.users.find({})</textarea>
                 </div>
                 <div class="editor-footer">
                     <span class="shortcut-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> to execute</span>
-                    <button id="executeBtn" class="btn-primary">
-                        <i class="ph-fill ph-play"></i> Execute Query
-                    </button>
+                    <button id="executeBtn" class="btn-primary"><i class="ph-fill ph-play"></i> Execute</button>
                 </div>
             </div>
 
-            <!-- Results Section -->
             <div class="results-section glass-panel">
                 <div class="panel-header">
-                    <div class="results-title">
-                        <i class="ph-fill ph-table icon-accent"></i>
-                        <span>Query Results</span>
-                    </div>
+                    <div class="results-title"><i class="ph-fill ph-table icon-accent"></i><span>Query Results</span></div>
                     <div class="results-stats hidden" id="resultsStats">
                         <span class="badge time-badge"><i class="ph ph-clock"></i> <span id="execTime">0ms</span></span>
-                        <span class="badge row-badge"><i class="ph ph-list-numbers"></i> <span id="recordCount">0 rows</span></span>
+                        <span class="badge row-badge"><i class="ph ph-list-numbers"></i> <span id="recordCount">0 docs</span></span>
                     </div>
                 </div>
-                
                 <div class="results-content">
-                    <!-- States -->
                     <div id="emptyState" class="state-container">
                         <i class="ph-duotone ph-terminal-window state-icon"></i>
                         <h3>Ready for Queries</h3>
-                        <p>Execute a query to see results here.</p>
+                        <p>Nhập truy vấn dạng <code>db.collection.find({ filter })</code> rồi nhấn Execute.</p>
                     </div>
-
                     <div id="loadingState" class="state-container hidden">
                         <i class="ph-duotone ph-circle-notch spin state-icon text-accent"></i>
                         <h3>Executing Query</h3>
-                        <p>Fetching data from the server...</p>
+                        <p>Fetching documents from MongoDB...</p>
                     </div>
-
                     <div id="errorState" class="state-container hidden error-state">
                         <i class="ph-duotone ph-warning-circle state-icon"></i>
                         <h3>Query Error</h3>
                         <p id="errorMsgText">Something went wrong.</p>
                     </div>
-
-                    <!-- Table -->
                     <div class="table-container hidden" id="tableContainer">
-                        <table id="resultTable">
-                            <thead id="tableHead"></thead>
-                            <tbody id="tableBody"></tbody>
-                        </table>
+                        <table id="resultTable"><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table>
                     </div>
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- Toast Notification -->
     <div id="toast" class="toast">
         <i class="ph-fill ph-check-circle" id="toastIcon"></i>
         <span id="toastMsg">Action successful</span>
     </div>
-
-    <!-- SQL Formatter (lightweight basic formatting logic inside script.js) -->
     <script src="script.js"></script>
 </body>
 </html>
